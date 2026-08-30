@@ -96,9 +96,10 @@ export default function OwnerPropertyManagement() {
       setSuccessMessage(`Property "${created.name}" created successfully!`);
       await loadData();
       setTimeout(() => setSuccessMessage(null), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create property', err);
-      setFormError('Failed to create property. Please try again.');
+      const errMsg = err?.message || 'Failed to create property. Please try again.';
+      setFormError(errMsg);
     } finally {
       setCreating(false);
     }

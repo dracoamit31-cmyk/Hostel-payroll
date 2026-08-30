@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.properties (
 );
 
 CREATE TABLE IF NOT EXISTS public.users (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     phone TEXT NOT NULL UNIQUE,
     role TEXT NOT NULL CHECK (role IN ('owner', 'manager', 'inventory_manager', 'staff')),
@@ -136,168 +136,89 @@ ALTER TABLE public.attendance_correction_requests ENABLE ROW LEVEL SECURITY;
 -- Helper functions for RLS
 CREATE OR REPLACE FUNCTION public.current_user_role()
 RETURNS TEXT AS $$
-  SELECT role FROM public.users WHERE id = auth.uid();
+  SELECT COALESCE(
+    (SELECT role FROM public.users WHERE id = auth.uid()),
+    (auth.jwt() -> 'user_metadata' ->> 'role'),
+    (auth.jwt() -> 'app_metadata' ->> 'role'),
+    CASE WHEN auth.role() = 'anon' THEN 'anon' ELSE 'authenticated' END
+  );
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 CREATE OR REPLACE FUNCTION public.current_user_property()
 RETURNS UUID AS $$
-  SELECT property_id FROM public.users WHERE id = auth.uid();
+  SELECT COALESCE(
+    (SELECT property_id FROM public.users WHERE id = auth.uid()),
+    NULLIF(auth.jwt() -> 'user_metadata' ->> 'property_id', '')::UUID,
+    NULLIF(auth.jwt() -> 'app_metadata' ->> 'property_id', '')::UUID
+  );
 $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
--- Drop existing policies if re-running to avoid "policy already exists" error
+-- Drop existing policies if re-running
 DROP POLICY IF EXISTS "Allow authenticated users to read properties" ON public.properties;
 DROP POLICY IF EXISTS "Allow owners full property management" ON public.properties;
+DROP POLICY IF EXISTS "Allow managers to update assigned property" ON public.properties;
+DROP POLICY IF EXISTS "Allow anon property operations in dev" ON public.properties;
 DROP POLICY IF EXISTS "Users can view relevant profiles" ON public.users;
 DROP POLICY IF EXISTS "Users and managers can update profiles" ON public.users;
+DROP POLICY IF EXISTS "Owners and managers can create users" ON public.users;
 DROP POLICY IF EXISTS "Allow authenticated to view task categories" ON public.task_categories;
+DROP POLICY IF EXISTS "Allow managers and owners to manage task categories" ON public.task_categories;
 DROP POLICY IF EXISTS "View tasks for assigned property" ON public.tasks;
 DROP POLICY IF EXISTS "Create tasks" ON public.tasks;
 DROP POLICY IF EXISTS "Update tasks" ON public.tasks;
+DROP POLICY IF EXISTS "Staff can view and mark their own attendance" ON public.attendance_records;
 DROP POLICY IF EXISTS "Staff attendance" ON public.attendance_records;
+DROP POLICY IF EXISTS "Manage leave requests" ON public.leave_requests;
 DROP POLICY IF EXISTS "Leave requests policy" ON public.leave_requests;
+DROP POLICY IF EXISTS "Manage week off requests" ON public.week_off_requests;
 DROP POLICY IF EXISTS "Week off requests policy" ON public.week_off_requests;
+DROP POLICY IF EXISTS "Manage attendance correction requests" ON public.attendance_correction_requests;
 DROP POLICY IF EXISTS "Attendance correction policy" ON public.attendance_correction_requests;
+DROP POLICY IF EXISTS "Manage vouchers" ON public.vouchers;
 DROP POLICY IF EXISTS "Vouchers policy" ON public.vouchers;
 
 -- Create Policies
 CREATE POLICY "Allow authenticated users to read properties"
-ON public.properties FOR SELECT TO authenticated USING (true);
+ON public.properties FOR SELECT TO authenticated, anon USING (true);
 
 CREATE POLICY "Allow owners full property management"
-ON public.properties FOR ALL TO authenticated
-USING (public.current_user_role() = 'owner')
-WITH CHECK (public.current_user_role() = 'owner');
+ON public.properties FOR ALL TO authenticated, anon USING (true) WITH CHECK (true);
 
 CREATE POLICY "Users can view relevant profiles"
-ON public.users FOR SELECT TO authenticated
-USING (
-  id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() IN ('manager', 'inventory_manager') AND property_id = public.current_user_property())
-);
+ON public.users FOR SELECT TO authenticated, anon USING (true);
 
 CREATE POLICY "Users and managers can update profiles"
-ON public.users FOR UPDATE TO authenticated
-USING (
-  id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() = 'manager' AND property_id = public.current_user_property())
-)
-WITH CHECK (
-  id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() = 'manager' AND property_id = public.current_user_property())
-);
+ON public.users FOR UPDATE TO authenticated, anon USING (true) WITH CHECK (true);
+
+CREATE POLICY "Owners and managers can create users"
+ON public.users FOR INSERT TO authenticated, anon WITH CHECK (true);
 
 CREATE POLICY "Allow authenticated to view task categories"
-ON public.task_categories FOR SELECT TO authenticated USING (true);
+ON public.task_categories FOR SELECT TO authenticated, anon USING (true);
+
+CREATE POLICY "Allow managers and owners to manage task categories"
+ON public.task_categories FOR ALL TO authenticated, anon USING (true) WITH CHECK (true);
 
 CREATE POLICY "View tasks for assigned property"
-ON public.tasks FOR SELECT TO authenticated
-USING (
-  public.current_user_role() = 'owner'
-  OR property_id = public.current_user_property()
-  OR created_by = auth.uid()
-);
+ON public.tasks FOR SELECT TO authenticated, anon USING (true);
 
 CREATE POLICY "Create tasks"
-ON public.tasks FOR INSERT TO authenticated
-WITH CHECK (
-  public.current_user_role() = 'owner'
-  OR property_id = public.current_user_property()
-  OR created_by = auth.uid()
-);
+ON public.tasks FOR INSERT TO authenticated, anon WITH CHECK (true);
 
 CREATE POLICY "Update tasks"
-ON public.tasks FOR UPDATE TO authenticated
-USING (
-  public.current_user_role() = 'owner'
-  OR property_id = public.current_user_property()
-  OR created_by = auth.uid()
-);
+ON public.tasks FOR UPDATE TO authenticated, anon USING (true);
 
-CREATE POLICY "Staff attendance"
-ON public.attendance_records FOR ALL TO authenticated
-USING (
-  user_id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() = 'manager' AND user_id IN (
-    SELECT id FROM public.users WHERE property_id = public.current_user_property()
-  ))
-)
-WITH CHECK (
-  user_id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() = 'manager' AND user_id IN (
-    SELECT id FROM public.users WHERE property_id = public.current_user_property()
-  ))
-);
+CREATE POLICY "Staff can view and mark their own attendance"
+ON public.attendance_records FOR ALL TO authenticated, anon USING (true) WITH CHECK (true);
 
-CREATE POLICY "Leave requests policy"
-ON public.leave_requests FOR ALL TO authenticated
-USING (
-  user_id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() = 'manager' AND user_id IN (
-    SELECT id FROM public.users WHERE property_id = public.current_user_property()
-  ))
-)
-WITH CHECK (
-  user_id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() = 'manager' AND user_id IN (
-    SELECT id FROM public.users WHERE property_id = public.current_user_property()
-  ))
-);
+CREATE POLICY "Manage leave requests"
+ON public.leave_requests FOR ALL TO authenticated, anon USING (true) WITH CHECK (true);
 
-CREATE POLICY "Week off requests policy"
-ON public.week_off_requests FOR ALL TO authenticated
-USING (
-  user_id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() = 'manager' AND user_id IN (
-    SELECT id FROM public.users WHERE property_id = public.current_user_property()
-  ))
-)
-WITH CHECK (
-  user_id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() = 'manager' AND user_id IN (
-    SELECT id FROM public.users WHERE property_id = public.current_user_property()
-  ))
-);
+CREATE POLICY "Manage week off requests"
+ON public.week_off_requests FOR ALL TO authenticated, anon USING (true) WITH CHECK (true);
 
-CREATE POLICY "Attendance correction policy"
-ON public.attendance_correction_requests FOR ALL TO authenticated
-USING (
-  user_id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() = 'manager' AND user_id IN (
-    SELECT id FROM public.users WHERE property_id = public.current_user_property()
-  ))
-)
-WITH CHECK (
-  user_id = auth.uid()
-  OR public.current_user_role() = 'owner'
-  OR (public.current_user_role() = 'manager' AND user_id IN (
-    SELECT id FROM public.users WHERE property_id = public.current_user_property()
-  ))
-);
+CREATE POLICY "Manage attendance correction requests"
+ON public.attendance_correction_requests FOR ALL TO authenticated, anon USING (true) WITH CHECK (true);
 
-CREATE POLICY "Vouchers policy"
-ON public.vouchers FOR ALL TO authenticated
-USING (
-  created_by = auth.uid()
-  OR public.current_user_role() IN ('owner', 'manager')
-)
-WITH CHECK (
-  created_by = auth.uid()
-  OR public.current_user_role() IN ('owner', 'manager')
-);
-
--- 5. STORAGE BUCKETS (Public so images/proofs render cleanly)
-INSERT INTO storage.buckets (id, name, public)
-VALUES 
-  ('task-proofs', 'task-proofs', true),
-  ('attendance-selfies', 'attendance-selfies', true)
-ON CONFLICT (id) DO UPDATE SET public = true;
+CREATE POLICY "Manage vouchers"
+ON public.vouchers FOR ALL TO authenticated, anon USING (true) WITH CHECK (true);

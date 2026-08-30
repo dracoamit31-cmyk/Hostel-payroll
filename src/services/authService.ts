@@ -183,15 +183,15 @@ export const authService = {
             shiftEnd: null,
           };
           // Upsert to public.users in background
-          Promise.resolve(
-            supabase.from('users').upsert({
+          try {
+            await supabase.from('users').upsert({
               id: ownerUser.id,
               name: ownerUser.name,
               phone: ownerUser.phone,
               role: ownerUser.role,
               property_id: ownerUser.propertyId,
-            })
-          ).catch(() => {});
+            });
+          } catch {}
           return { success: true, user: ownerUser };
         }
 
@@ -203,27 +203,42 @@ export const authService = {
 
       // 5. Construct and return the verified database user
       const user: User = {
-        id: matchedDbUser?.id || authUser?.id || 'usr-owner-amit',
+        id: authUser?.id || matchedDbUser?.id || 'usr-owner-amit',
         name: matchedDbUser?.name || authUser?.user_metadata?.name || 'Amit',
         phone: matchedDbUser?.phone || phone,
-        role: (matchedDbUser?.role as any) || authUser?.user_metadata?.role || 'owner',
+        role: (matchedDbUser?.role as any) || authUser?.user_metadata?.role || (standard10 === '9876543210' ? 'owner' : 'staff'),
         propertyId: matchedDbUser?.property_id || authUser?.user_metadata?.property_id || null,
         staffType: matchedDbUser?.staff_type || null,
         shiftStart: matchedDbUser?.shift_start || null,
         shiftEnd: matchedDbUser?.shift_end || null,
       };
 
-      // Ensure public.users table has the record
-      if (!matchedDbUser && user.id) {
-        Promise.resolve(
-          supabase.from('users').upsert({
+      // Ensure public.users table has the matching auth UUID record so RLS current_user_role() works
+      if (authUser?.id) {
+        try {
+          await supabase.from('users').upsert({
+            id: authUser.id,
+            name: user.name,
+            phone: user.phone,
+            role: user.role,
+            property_id: user.propertyId,
+            staff_type: user.staffType,
+            shift_start: user.shiftStart,
+            shift_end: user.shiftEnd,
+          }, { onConflict: 'id' });
+        } catch (syncErr) {
+          console.warn('Notice: user sync to public.users table:', syncErr);
+        }
+      } else if (user.id) {
+        try {
+          await supabase.from('users').upsert({
             id: user.id,
             name: user.name,
             phone: user.phone,
             role: user.role,
             property_id: user.propertyId,
-          })
-        ).catch(() => {});
+          });
+        } catch {}
       }
 
       return { success: true, user };
@@ -291,8 +306,24 @@ export const authService = {
       });
 
       if (match) {
+        // If match.id doesn't match authUser.id, ensure public.users has authUser.id record for RLS
+        if (match.id !== authUser.id) {
+          try {
+            await supabase.from('users').upsert({
+              id: authUser.id,
+              name: match.name,
+              phone: match.phone,
+              role: match.role,
+              property_id: match.property_id,
+              staff_type: match.staff_type,
+              shift_start: match.shift_start,
+              shift_end: match.shift_end,
+            }, { onConflict: 'id' });
+          } catch {}
+        }
+
         return {
-          id: match.id,
+          id: authUser.id,
           name: match.name,
           phone: match.phone,
           role: match.role,
@@ -303,18 +334,31 @@ export const authService = {
         };
       }
 
-      // Fallback to user metadata
+      // Fallback to user metadata and sync to public.users
       const meta = authUser.user_metadata || {};
-      return {
+      const fallbackRole = (meta.role as any) || (phoneDigits === '9876543210' ? 'owner' : 'staff');
+      const fallbackUser: User = {
         id: authUser.id,
-        name: meta.name || 'Staff Member',
-        phone: meta.phone || phoneDigits,
-        role: (meta.role as any) || 'staff',
+        name: meta.name || (fallbackRole === 'owner' ? 'Amit' : 'Staff Member'),
+        phone: meta.phone || phoneDigits || '+91 98765 43210',
+        role: fallbackRole,
         propertyId: meta.property_id || null,
         staffType: null,
         shiftStart: null,
         shiftEnd: null,
       };
+
+      try {
+        await supabase.from('users').upsert({
+          id: fallbackUser.id,
+          name: fallbackUser.name,
+          phone: fallbackUser.phone,
+          role: fallbackUser.role,
+          property_id: fallbackUser.propertyId,
+        }, { onConflict: 'id' });
+      } catch {}
+
+      return fallbackUser;
     } catch {
       return null;
     }
