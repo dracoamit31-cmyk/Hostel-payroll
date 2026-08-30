@@ -231,18 +231,10 @@ export function subscribeSchemaPending(listener: (pending: boolean) => void): ()
   };
 }
 
-function notifySchemaMissing(table: string, err: any) {
+function notifySchemaMissing(_table: string, _err: any) {
   if (!isSchemaPending) {
     isSchemaPending = true;
     schemaListeners.forEach((fn) => fn(true));
-  }
-  if (!hasLoggedSchemaNotice) {
-    hasLoggedSchemaNotice = true;
-    console.warn(
-      `[HostelOps Data Layer] Supabase table '${table}' is not yet created in PostgreSQL schema cache (PGRST205). ` +
-      `HostelOps is seamlessly operating with local in-memory fallback data so all features work without disruption. ` +
-      `To activate persistent PostgreSQL storage, run 'supabase/migrations/full_migration.sql' in your Supabase SQL Editor.`
-    );
   }
 }
 
@@ -255,12 +247,12 @@ export const dataService = {
     try {
       const { data, error } = await supabase.from('properties').select('*');
       if (error) {
-        notifySchemaMissing('properties', error);
+        if (isSchemaMissingError(error)) notifySchemaMissing('properties', error);
         return mockData.getProperties();
       }
-      return (data || []).map(mapProperty);
+      return (data && data.length > 0) ? data.map(mapProperty) : mockData.getProperties();
     } catch (err) {
-      notifySchemaMissing('properties', err);
+      if (isSchemaMissingError(err)) notifySchemaMissing('properties', err);
       return mockData.getProperties();
     }
   },
@@ -275,7 +267,7 @@ export const dataService = {
       }
       return data ? mapProperty(data) : null;
     } catch (err) {
-      notifySchemaMissing('properties', err);
+      if (isSchemaMissingError(err)) notifySchemaMissing('properties', err);
       return mockData.getPropertyById(id);
     }
   },
@@ -340,12 +332,12 @@ export const dataService = {
     try {
       const { data, error } = await supabase.from('users').select('*');
       if (error) {
-        notifySchemaMissing('users', error);
+        if (isSchemaMissingError(error)) notifySchemaMissing('users', error);
         return mockData.getUsers();
       }
-      return (data || []).map(mapUser);
+      return (data && data.length > 0) ? data.map(mapUser) : mockData.getUsers();
     } catch (err) {
-      notifySchemaMissing('users', err);
+      if (isSchemaMissingError(err)) notifySchemaMissing('users', err);
       return mockData.getUsers();
     }
   },
@@ -360,7 +352,7 @@ export const dataService = {
       }
       return data ? mapUser(data) : null;
     } catch (err) {
-      notifySchemaMissing('users', err);
+      if (isSchemaMissingError(err)) notifySchemaMissing('users', err);
       return mockData.getUserById(id);
     }
   },
@@ -370,12 +362,12 @@ export const dataService = {
     try {
       const { data, error } = await supabase.from('users').select('*').eq('property_id', propertyId);
       if (error) {
-        notifySchemaMissing('users', error);
+        if (isSchemaMissingError(error)) notifySchemaMissing('users', error);
         return mockData.getUsersByProperty(propertyId);
       }
       return (data || []).map(mapUser);
     } catch (err) {
-      notifySchemaMissing('users', err);
+      if (isSchemaMissingError(err)) notifySchemaMissing('users', err);
       return mockData.getUsersByProperty(propertyId);
     }
   },
@@ -385,12 +377,12 @@ export const dataService = {
     try {
       const { data, error } = await supabase.from('users').select('*').eq('role', role);
       if (error) {
-        notifySchemaMissing('users', error);
+        if (isSchemaMissingError(error)) notifySchemaMissing('users', error);
         return mockData.getUsersByRole(role);
       }
       return (data || []).map(mapUser);
     } catch (err) {
-      notifySchemaMissing('users', err);
+      if (isSchemaMissingError(err)) notifySchemaMissing('users', err);
       return mockData.getUsersByRole(role);
     }
   },

@@ -674,7 +674,7 @@ export default function PlaceholderDashboard() {
             {/* Footer note */}
             <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-950/30 p-3 rounded-lg border border-slate-800/40">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>Clicking &quot;Switch User&quot; will return you to the Dev Login persona selector.</span>
+              <span>Session is active. Click &quot;Sign Out&quot; to securely end your session.</span>
             </div>
           </div>
         )}

@@ -48,8 +48,8 @@ export const mockUsers: User[] = [
   // 1 Owner
   {
     id: 'usr-owner-1',
-    name: 'Vikramaditya Singhania',
-    phone: '+91 98765 00001',
+    name: 'Amit',
+    phone: '+91 98765 43210',
     role: 'owner',
     propertyId: null,
     staffType: null,
