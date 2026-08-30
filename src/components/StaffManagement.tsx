@@ -7,7 +7,7 @@ import {
   getUsersByProperty,
   createUser,
   deleteUser,
-} from '../mockData';
+} from '../services/dataService';
 import {
   Users,
   UserPlus,

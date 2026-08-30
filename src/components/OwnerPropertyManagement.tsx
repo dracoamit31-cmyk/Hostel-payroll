@@ -6,7 +6,7 @@ import {
   getUsersByProperty,
   createProperty,
   updateUser,
-} from '../mockData';
+} from '../services/dataService';
 import {
   Building2,
   Plus,

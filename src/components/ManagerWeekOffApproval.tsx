@@ -6,7 +6,7 @@ import {
   getWeekOffRequests,
   updateWeekOffRequestStatus,
   getPropertyById,
-} from '../mockData';
+} from '../services/dataService';
 import {
   Palmtree,
   Calendar,

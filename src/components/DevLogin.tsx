@@ -1,31 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { User, Property, UserRole } from '../types';
-import { getUsers, getProperties } from '../mockData';
 import { useAuth } from '../context/AuthContext';
-import {
-  formatInternalEmail,
-  isSupabaseConfigured,
-} from '../supabaseClient';
+import { dataService } from '../services/dataService';
+import { isProduction } from '../config/env';
+import { formatInternalEmail } from '../supabaseClient';
 import {
   Lock,
   Phone,
   KeyRound,
   LogIn,
   AlertCircle,
-  Building2,
-  Shield,
-  Briefcase,
-  UserCheck,
-  Users,
   Eye,
   EyeOff,
   Sparkles,
   Info,
   CheckCircle2,
+  Terminal,
 } from 'lucide-react';
 
 export default function DevLogin() {
-  const { loginWithPhonePin, isSupabaseConfigured: authSupabaseConfigured } = useAuth();
+  const { loginWithPhonePin, isSupabaseConfigured, isProduction: isProd } = useAuth();
 
   const [phone, setPhone] = useState<string>('+91 98765 00001');
   const [pin, setPin] = useState<string>('123456');
@@ -43,7 +37,10 @@ export default function DevLogin() {
     async function loadMockProfiles() {
       try {
         setLoadingUsers(true);
-        const [uList, pList] = await Promise.all([getUsers(), getProperties()]);
+        const [uList, pList] = await Promise.all([
+          dataService.getUsers(),
+          dataService.getProperties(),
+        ]);
         setUsers(uList);
         setProperties(pList);
       } catch (err) {
@@ -78,9 +75,9 @@ export default function DevLogin() {
       const result = await loginWithPhonePin(cleanPhone, cleanPin);
 
       if (!result.success) {
-        setErrorMessage(result.error || 'Authentication failed. Please check your phone number and PIN.');
+        setErrorMessage(result.error || 'Authentication failed. Please check your credentials.');
       } else {
-        setSuccessMessage('Authentication successful! Logging in...');
+        setSuccessMessage('Authentication successful! Routing to dashboard...');
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'An unexpected error occurred during login.';
@@ -130,17 +127,32 @@ export default function DevLogin() {
           <p className="text-xs sm:text-sm text-slate-400">
             Sign in with your registered phone number and secure PIN.
           </p>
+
+          {/* Environment Banner */}
+          <div className="pt-1 flex justify-center">
+            {isProd ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Production Mode (Supabase Auth & Database)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-800/60">
+                <Terminal className="w-3 h-3 text-indigo-400" />
+                Development Mode (Local / In-Memory)
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Supabase Config Warning (if env vars missing) */}
-        {!authSupabaseConfigured && (
-          <div className="p-4 rounded-xl bg-amber-950/60 border border-amber-800/80 text-amber-200 text-xs space-y-2">
-            <div className="flex items-center gap-2 font-semibold text-amber-300">
+        {/* Missing Config Alert in Production */}
+        {isProd && !isSupabaseConfigured && (
+          <div className="p-4 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs space-y-2">
+            <div className="flex items-center gap-2 font-semibold text-rose-300">
               <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>Supabase Environment Variables Required</span>
+              <span>Production Supabase Configuration Missing</span>
             </div>
-            <p className="leading-relaxed text-amber-300/80">
-              Please configure <code className="bg-amber-900/60 px-1 py-0.5 rounded text-[11px] font-mono">VITE_SUPABASE_URL</code> and <code className="bg-amber-900/60 px-1 py-0.5 rounded text-[11px] font-mono">VITE_SUPABASE_ANON_KEY</code> in your environment settings to enable live Supabase Auth.
+            <p className="leading-relaxed text-rose-300/90">
+              In production mode (<code className="bg-rose-900/60 px-1 py-0.5 rounded font-mono">VITE_APP_ENV=production</code>), <code className="bg-rose-900/60 px-1 py-0.5 rounded font-mono">VITE_SUPABASE_URL</code> and <code className="bg-rose-900/60 px-1 py-0.5 rounded font-mono">VITE_SUPABASE_ANON_KEY</code> must be set in Netlify environment variables.
             </p>
           </div>
         )}
@@ -232,7 +244,7 @@ export default function DevLogin() {
               {loading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Authenticating with Supabase...
+                  Authenticating...
                 </>
               ) : (
                 <>
@@ -243,16 +255,16 @@ export default function DevLogin() {
             </button>
           </form>
 
-          {/* Notice about Phone + PIN auth architecture */}
+          {/* Architecture note */}
           <div className="pt-3 border-t border-slate-800 flex items-start gap-2 text-[11.5px] text-slate-400">
             <Info className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
             <p className="leading-relaxed">
-              Phone number + PIN login is authenticated securely via Supabase Auth using internal credentials (<code className="text-slate-300 font-mono text-[11px]">{`{phone}@hostelops.internal`}</code>).
+              Phone number + PIN login is authenticated securely using internal credentials (<code className="text-slate-300 font-mono text-[11px]">{`{phone}@hostelops.internal`}</code>).
             </p>
           </div>
         </div>
 
-        {/* Quick-Select Mock Accounts Helper */}
+        {/* Quick-Select Personas (Active in dev or demo) */}
         <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -268,7 +280,7 @@ export default function DevLogin() {
 
           {loadingUsers ? (
             <div className="py-4 text-center text-xs text-slate-500">
-              Loading test accounts...
+              Loading personas...
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">

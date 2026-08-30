@@ -8,7 +8,7 @@ import {
   getPropertyById,
   getAttendanceCorrectionRequestsByProperty,
   updateAttendanceCorrectionRequestStatus,
-} from '../mockData';
+} from '../services/dataService';
 import {
   Calendar,
   CheckCircle2,

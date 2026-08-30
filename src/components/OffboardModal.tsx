@@ -3,7 +3,7 @@ import { User } from '../types';
 import {
   getCarriedForwardWeekOffBalance,
   getEmployeeMonthlySalary,
-} from '../mockData';
+} from '../services/dataService';
 import {
   UserMinus,
   X,

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Property } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { getPropertyById, updateProperty } from '../mockData';
+import { getPropertyById, updateProperty } from '../services/dataService';
 import {
   MapPin,
   Compass,

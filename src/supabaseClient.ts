@@ -1,25 +1,28 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { isProduction, getSupabaseConfig } from './config/env';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const config = getSupabaseConfig();
 
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured = config.isConfigured;
 
-if (!isSupabaseConfigured) {
-  console.warn(
-    'Supabase environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) are missing or incomplete. Please configure them in your environment settings.'
+// Fail-safe client initialization:
+// In development, we use dummy values if credentials aren't provided because
+// all queries route to local mock storage.
+// In production, we require real credentials and fail clearly.
+if (isProduction() && !isSupabaseConfigured) {
+  console.error(
+    'CRITICAL PRODUCTION ERROR: Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in production mode!'
   );
 }
 
-// Initialize Supabase client
 export const supabase: SupabaseClient = createClient(
-  supabaseUrl || 'https://placeholder.supabase.co',
-  supabaseAnonKey || 'placeholder-anon-key',
+  config.url || 'https://placeholder.supabase.co',
+  config.anonKey || 'placeholder-anon-key',
   {
     auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: false,
+      persistSession: isProduction(),
+      autoRefreshToken: isProduction(),
+      detectSessionInUrl: isProduction(),
     },
   }
 );

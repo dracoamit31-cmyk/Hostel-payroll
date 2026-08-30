@@ -5,7 +5,7 @@ import {
   getPropertyById,
   getAttendanceByUser,
   markAttendance,
-} from '../mockData';
+} from '../services/dataService';
 import {
   Clock,
   Camera,

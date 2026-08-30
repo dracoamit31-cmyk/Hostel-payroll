@@ -5,7 +5,7 @@ import {
   getAttendanceByUserAndDate,
   getUsersByProperty,
   getAttendanceCorrectionRequestsByProperty,
-} from '../mockData';
+} from '../services/dataService';
 import { Property } from '../types';
 import {
   LogOut,

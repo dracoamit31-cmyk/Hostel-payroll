@@ -5,7 +5,7 @@ import {
   createAttendanceCorrectionRequest,
   getAttendanceCorrectionRequestsByUser,
   getAttendanceByUserAndDate,
-} from '../mockData';
+} from '../services/dataService';
 import {
   Calendar,
   Clock,

@@ -1,12 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../types';
-import { getUsers } from '../mockData';
-import {
-  supabase,
-  formatInternalEmail,
-  extractPhoneDigitsFromEmail,
-  isSupabaseConfigured,
-} from '../supabaseClient';
+import { authService } from '../services/authService';
+import { isProduction, isDevelopment } from '../config/env';
+import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -14,9 +10,10 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   isSupabaseConfigured: boolean;
+  isProduction: boolean;
   loginWithPhonePin: (phone: string, pin: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  // For backwards compatibility and direct profile switching
+  // For backwards compatibility and direct profile switching in development
   login: (user: User) => void;
 }
 
@@ -27,32 +24,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Helper to resolve User profile by phone digits from mockData
-  const resolveUserProfileByPhone = async (phoneDigits: string): Promise<User | null> => {
-    if (!phoneDigits) return null;
-    const users = await getUsers();
-    const cleanDigits = phoneDigits.replace(/\D/g, '');
-    const matched = users.find((u) => u.phone.replace(/\D/g, '') === cleanDigits);
-    return matched || null;
-  };
-
-  // Sync Supabase Auth Session
+  // Initialize session on mount
   useEffect(() => {
     let mounted = true;
 
     async function initAuth() {
       try {
-        const { data } = await supabase.auth.getSession();
-        if (!mounted) return;
-
-        setSession(data.session);
-
-        if (data.session?.user?.email) {
-          const phoneDigits = extractPhoneDigitsFromEmail(data.session.user.email);
-          const profile = await resolveUserProfileByPhone(phoneDigits);
-          if (profile && mounted) {
-            setCurrentUser(profile);
+        if (isProduction()) {
+          const { data } = await supabase.auth.getSession();
+          if (mounted) {
+            setSession(data.session);
           }
+        }
+
+        const initialUser = await authService.getInitialUser();
+        if (mounted && initialUser) {
+          setCurrentUser(initialUser);
         }
       } catch (err) {
         console.error('Error initializing auth session:', err);
@@ -63,138 +50,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     initAuth();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-      if (!mounted) return;
-      setSession(newSession);
+    // In production, listen to Supabase auth state changes
+    if (isProduction()) {
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+        if (!mounted) return;
+        setSession(newSession);
 
-      if (newSession?.user?.email) {
-        const phoneDigits = extractPhoneDigitsFromEmail(newSession.user.email);
-        const profile = await resolveUserProfileByPhone(phoneDigits);
-        if (profile && mounted) {
-          setCurrentUser(profile);
+        if (newSession?.user) {
+          const user = await authService.getInitialUser();
+          if (mounted) setCurrentUser(user);
+        } else {
+          if (mounted) setCurrentUser(null);
         }
-      } else {
-        if (mounted) {
-          setCurrentUser(null);
-        }
-      }
-    });
+      });
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+      return () => {
+        mounted = false;
+        subscription.unsubscribe();
+      };
+    } else {
+      setLoading(false);
+    }
   }, []);
 
   /**
    * Log in with Phone Number and PIN
-   * Internally maps phone to ${digits}@hostelops.internal and PIN to password
    */
   const loginWithPhonePin = async (
     phone: string,
     pin: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const email = formatInternalEmail(phone);
-      const cleanPhoneDigits = phone.replace(/\D/g, '');
-
-      // Verify that this phone corresponds to a known user in the system
-      const userProfile = await resolveUserProfileByPhone(cleanPhoneDigits);
-      if (!userProfile) {
-        return {
-          success: false,
-          error: `No staff or manager profile found registered with phone number ${phone}.`,
-        };
-      }
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password: pin,
-      });
-
-      if (error) {
-        // If the user doesn't exist in Supabase Auth yet (e.g. first time login),
-        // we can attempt an automatic initial registration.
-        if (
-          error.message.toLowerCase().includes('invalid login credentials') ||
-          error.message.toLowerCase().includes('user not found')
-        ) {
-          // Attempt sign-up for seamless onboarding of mock accounts in Supabase
-          const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-            email,
-            password: pin,
-            options: {
-              data: {
-                phone: userProfile.phone,
-                name: userProfile.name,
-                role: userProfile.role,
-              },
-            },
-          });
-
-          if (signUpError) {
-            // Check if rate limited on email sending (Supabase default is 3 emails/hour for signups unless email confirmation is disabled)
-            if (signUpError.message.toLowerCase().includes('rate limit')) {
-              // Set the mock user profile directly so development isn't blocked by Supabase's built-in email rate limiter
-              setCurrentUser(userProfile);
-              return {
-                success: true,
-                error:
-                  'Note: Supabase email rate limit reached. Signed in locally with user profile. (To fix this permanently, disable "Confirm email" in your Supabase Dashboard under Authentication -> Providers -> Email).',
-              };
-            }
-
-            return {
-              success: false,
-              error: `Supabase Auth Error: ${error.message}. (Sign-up fallback: ${signUpError.message})`,
-            };
-          }
-
-          if (signUpData.session) {
-            setSession(signUpData.session);
-            setCurrentUser(userProfile);
-            return { success: true };
-          } else if (signUpData.user && !signUpData.session) {
-            // If email confirmation is enabled in Supabase, session is null until confirmed.
-            // Allow login to proceed for development with the matched profile while advising how to disable email confirmation in Supabase:
-            setCurrentUser(userProfile);
-            return {
-              success: true,
-              error:
-                'Signed in. Note: In your Supabase Dashboard under Authentication > Providers > Email, turn OFF "Confirm email" so that new users get logged in immediately without email verification.',
-            };
-          }
-        }
-
-        return {
-          success: false,
-          error: error.message || 'Failed to authenticate with Supabase.',
-        };
-      }
-
-      if (data.session) {
-        setSession(data.session);
-        setCurrentUser(userProfile);
+      setLoading(true);
+      const res = await authService.loginWithPhonePin(phone, pin);
+      if (res.success && res.user) {
+        setCurrentUser(res.user);
         return { success: true };
       }
-
-      return { success: true };
+      return { success: false, error: res.error || 'Authentication failed' };
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : 'Unknown authentication error';
-      return { success: false, error: errorMsg };
+      const msg = err instanceof Error ? err.message : 'Login failed';
+      return { success: false, error: msg };
+    } finally {
+      setLoading(false);
     }
   };
 
   /**
-   * Log out from Supabase Auth
+   * Log out
    */
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error('Error during Supabase signOut:', err);
+      await authService.logout();
     } finally {
       setSession(null);
       setCurrentUser(null);
@@ -202,10 +111,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Direct login helper (for mock switching / fallback)
+   * Direct login helper (for dev mode switching)
    */
   const login = (user: User) => {
     setCurrentUser(user);
+    if (isDevelopment()) {
+      try {
+        localStorage.setItem('hostelops_dev_auth_user', JSON.stringify(user));
+      } catch {
+        // ignore
+      }
+    }
   };
 
   return (
@@ -215,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         loading,
         isSupabaseConfigured,
+        isProduction: isProduction(),
         loginWithPhonePin,
         logout,
         login,
@@ -232,4 +149,3 @@ export function useAuth(): AuthContextType {
   }
   return context;
 }
-

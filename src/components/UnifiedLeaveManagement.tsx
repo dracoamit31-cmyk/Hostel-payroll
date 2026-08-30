@@ -10,7 +10,7 @@ import {
   getPropertyById,
   getUsers,
   getUsersByProperty,
-} from '../mockData';
+} from '../services/dataService';
 import {
   Calendar,
   CalendarCheck,
