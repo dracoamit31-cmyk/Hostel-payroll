@@ -200,7 +200,6 @@ const mapAttendanceCorrectionRequest = (
 
 // Schema state tracking & detection
 let isSchemaPending = false;
-let hasLoggedSchemaNotice = false;
 const schemaListeners: Array<(pending: boolean) => void> = [];
 
 export function isSchemaMissingError(error: any): boolean {
@@ -245,30 +244,32 @@ export const dataService = {
   async getProperties(): Promise<Property[]> {
     if (!isProduction()) return mockData.getProperties();
     try {
-      const { data, error } = await supabase.from('properties').select('*');
+      const { data, error } = await supabase.from('properties').select('*').order('name');
       if (error) {
         if (isSchemaMissingError(error)) notifySchemaMissing('properties', error);
-        return mockData.getProperties();
+        console.warn('Properties table query notice:', error.message);
+        return [];
       }
-      return (data && data.length > 0) ? data.map(mapProperty) : mockData.getProperties();
+      return (data || []).map(mapProperty);
     } catch (err) {
       if (isSchemaMissingError(err)) notifySchemaMissing('properties', err);
-      return mockData.getProperties();
+      console.warn('Properties fetch error:', err);
+      return [];
     }
   },
 
   async getPropertyById(id: string): Promise<Property | null> {
     if (!isProduction()) return mockData.getPropertyById(id);
     try {
-      const { data, error } = await supabase.from('properties').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('properties').select('*').eq('id', id).maybeSingle();
       if (error) {
         if (isSchemaMissingError(error)) notifySchemaMissing('properties', error);
-        return mockData.getPropertyById(id);
+        return null;
       }
       return data ? mapProperty(data) : null;
     } catch (err) {
       if (isSchemaMissingError(err)) notifySchemaMissing('properties', err);
-      return mockData.getPropertyById(id);
+      return null;
     }
   },
 
@@ -288,12 +289,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('properties', error);
-        return mockData.createProperty(property);
+        throw new Error(error.message || 'Failed to create property in database');
       }
       return mapProperty(data);
-    } catch (err) {
+    } catch (err: any) {
       notifySchemaMissing('properties', err);
-      return mockData.createProperty(property);
+      throw err;
     }
   },
 
@@ -315,12 +316,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('properties', error);
-        return mockData.updateProperty(id, updates);
+        throw new Error(error.message || 'Failed to update property in database');
       }
       return data ? mapProperty(data) : null;
     } catch (err) {
       notifySchemaMissing('properties', err);
-      return mockData.updateProperty(id, updates);
+      throw err;
     }
   },
 
@@ -330,30 +331,32 @@ export const dataService = {
   async getUsers(): Promise<User[]> {
     if (!isProduction()) return mockData.getUsers();
     try {
-      const { data, error } = await supabase.from('users').select('*');
+      const { data, error } = await supabase.from('users').select('*').order('name');
       if (error) {
         if (isSchemaMissingError(error)) notifySchemaMissing('users', error);
-        return mockData.getUsers();
+        console.warn('Users query notice:', error.message);
+        return [];
       }
-      return (data && data.length > 0) ? data.map(mapUser) : mockData.getUsers();
+      return (data || []).map(mapUser);
     } catch (err) {
       if (isSchemaMissingError(err)) notifySchemaMissing('users', err);
-      return mockData.getUsers();
+      console.warn('Users fetch error:', err);
+      return [];
     }
   },
 
   async getUserById(id: string): Promise<User | null> {
     if (!isProduction()) return mockData.getUserById(id);
     try {
-      const { data, error } = await supabase.from('users').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('users').select('*').eq('id', id).maybeSingle();
       if (error) {
         if (isSchemaMissingError(error)) notifySchemaMissing('users', error);
-        return mockData.getUserById(id);
+        return null;
       }
       return data ? mapUser(data) : null;
     } catch (err) {
       if (isSchemaMissingError(err)) notifySchemaMissing('users', err);
-      return mockData.getUserById(id);
+      return null;
     }
   },
 
@@ -363,12 +366,12 @@ export const dataService = {
       const { data, error } = await supabase.from('users').select('*').eq('property_id', propertyId);
       if (error) {
         if (isSchemaMissingError(error)) notifySchemaMissing('users', error);
-        return mockData.getUsersByProperty(propertyId);
+        return [];
       }
       return (data || []).map(mapUser);
     } catch (err) {
       if (isSchemaMissingError(err)) notifySchemaMissing('users', err);
-      return mockData.getUsersByProperty(propertyId);
+      return [];
     }
   },
 
@@ -378,12 +381,12 @@ export const dataService = {
       const { data, error } = await supabase.from('users').select('*').eq('role', role);
       if (error) {
         if (isSchemaMissingError(error)) notifySchemaMissing('users', error);
-        return mockData.getUsersByRole(role);
+        return [];
       }
       return (data || []).map(mapUser);
     } catch (err) {
       if (isSchemaMissingError(err)) notifySchemaMissing('users', err);
-      return mockData.getUsersByRole(role);
+      return [];
     }
   },
 
@@ -406,12 +409,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('users', error);
-        return mockData.createUser(user);
+        throw new Error(error.message || 'Failed to create user in database');
       }
       return mapUser(data);
     } catch (err) {
       notifySchemaMissing('users', err);
-      return mockData.createUser(user);
+      throw err;
     }
   },
 
@@ -435,12 +438,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('users', error);
-        return mockData.updateUser(id, updates);
+        throw new Error(error.message || 'Failed to update user in database');
       }
       return data ? mapUser(data) : null;
     } catch (err) {
       notifySchemaMissing('users', err);
-      return mockData.updateUser(id, updates);
+      throw err;
     }
   },
 
@@ -450,12 +453,12 @@ export const dataService = {
       const { error } = await supabase.from('users').delete().eq('id', id);
       if (error) {
         notifySchemaMissing('users', error);
-        return mockData.deleteUser(id);
+        throw new Error(error.message || 'Failed to delete user from database');
       }
       return true;
     } catch (err) {
       notifySchemaMissing('users', err);
-      return mockData.deleteUser(id);
+      throw err;
     }
   },
 
@@ -468,12 +471,12 @@ export const dataService = {
       const { data, error } = await supabase.from('attendance_records').select('*');
       if (error) {
         notifySchemaMissing('attendance_records', error);
-        return mockData.getAttendanceRecords();
+        return [];
       }
       return (data || []).map(mapAttendance);
     } catch (err) {
       notifySchemaMissing('attendance_records', err);
-      return mockData.getAttendanceRecords();
+      return [];
     }
   },
 
@@ -486,12 +489,12 @@ export const dataService = {
         .eq('user_id', userId);
       if (error) {
         notifySchemaMissing('attendance_records', error);
-        return mockData.getAttendanceByUser(userId);
+        return [];
       }
       return (data || []).map(mapAttendance);
     } catch (err) {
       notifySchemaMissing('attendance_records', err);
-      return mockData.getAttendanceByUser(userId);
+      return [];
     }
   },
 
@@ -504,12 +507,12 @@ export const dataService = {
         .eq('date', date);
       if (error) {
         notifySchemaMissing('attendance_records', error);
-        return mockData.getAttendanceByDate(date);
+        return [];
       }
       return (data || []).map(mapAttendance);
     } catch (err) {
       notifySchemaMissing('attendance_records', err);
-      return mockData.getAttendanceByDate(date);
+      return [];
     }
   },
 
@@ -524,12 +527,12 @@ export const dataService = {
         .maybeSingle();
       if (error) {
         if (isSchemaMissingError(error)) notifySchemaMissing('attendance_records', error);
-        return mockData.getAttendanceByUserAndDate(userId, date);
+        return null;
       }
       return data ? mapAttendance(data) : null;
     } catch (err) {
       notifySchemaMissing('attendance_records', err);
-      return mockData.getAttendanceByUserAndDate(userId, date);
+      return null;
     }
   },
 
@@ -560,7 +563,7 @@ export const dataService = {
           .single();
         if (error) {
           notifySchemaMissing('attendance_records', error);
-          return mockData.markAttendance(record);
+          throw new Error(error.message || 'Failed to mark attendance');
         }
         return mapAttendance(data);
       } else {
@@ -571,13 +574,13 @@ export const dataService = {
           .single();
         if (error) {
           notifySchemaMissing('attendance_records', error);
-          return mockData.markAttendance(record);
+          throw new Error(error.message || 'Failed to mark attendance');
         }
         return mapAttendance(data);
       }
     } catch (err) {
       notifySchemaMissing('attendance_records', err);
-      return mockData.markAttendance(record);
+      throw err;
     }
   },
 
@@ -590,12 +593,12 @@ export const dataService = {
       const { data, error } = await supabase.from('week_off_requests').select('*');
       if (error) {
         notifySchemaMissing('week_off_requests', error);
-        return mockData.getWeekOffRequests();
+        return [];
       }
       return (data || []).map(mapWeekOffRequest);
     } catch (err) {
       notifySchemaMissing('week_off_requests', err);
-      return mockData.getWeekOffRequests();
+      return [];
     }
   },
 
@@ -608,12 +611,12 @@ export const dataService = {
         .eq('user_id', userId);
       if (error) {
         notifySchemaMissing('week_off_requests', error);
-        return mockData.getWeekOffRequestsByUser(userId);
+        return [];
       }
       return (data || []).map(mapWeekOffRequest);
     } catch (err) {
       notifySchemaMissing('week_off_requests', err);
-      return mockData.getWeekOffRequestsByUser(userId);
+      return [];
     }
   },
 
@@ -633,12 +636,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('week_off_requests', error);
-        return mockData.createWeekOffRequest(request);
+        throw new Error(error.message || 'Failed to create week off request');
       }
       return mapWeekOffRequest(data);
     } catch (err) {
       notifySchemaMissing('week_off_requests', err);
-      return mockData.createWeekOffRequest(request);
+      throw err;
     }
   },
 
@@ -665,21 +668,63 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('week_off_requests', error);
-        return mockData.updateWeekOffRequestStatus(id, status, reviewedBy, reason);
+        throw new Error(error.message || 'Failed to update week off request');
       }
       return data ? mapWeekOffRequest(data) : null;
     } catch (err) {
       notifySchemaMissing('week_off_requests', err);
-      return mockData.updateWeekOffRequestStatus(id, status, reviewedBy, reason);
+      throw err;
     }
   },
 
   async getCarriedForwardWeekOffBalance(userId: string): Promise<number> {
-    return mockData.getCarriedForwardWeekOffBalance(userId);
+    try {
+      const records = await this.getAttendanceByUser(userId);
+      const today = new Date();
+      const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      
+      const priorMonthsSet = new Set<string>();
+      records.forEach((r) => {
+        const ym = r.date.substring(0, 7);
+        if (ym < currentYearMonth) {
+          priorMonthsSet.add(ym);
+        }
+      });
+
+      let carriedForwardBalance = 0;
+      priorMonthsSet.forEach((ym) => {
+        const usedInMonth = records.filter(
+          (r) => r.date.startsWith(ym) && r.status === 'week_off'
+        ).length;
+        const unusedInMonth = Math.max(0, 4 - usedInMonth);
+        carriedForwardBalance += unusedInMonth;
+      });
+
+      return carriedForwardBalance;
+    } catch {
+      return 0;
+    }
   },
 
   async getEmployeeMonthlySalary(user: User): Promise<number> {
-    return mockData.getEmployeeMonthlySalary(user);
+    if (user.role === 'inventory_manager') return 25000;
+    if (user.role === 'manager') return 35000;
+    if (user.role === 'owner') return 50000;
+
+    switch (user.staffType?.toLowerCase()) {
+      case 'front desk':
+        return 20000;
+      case 'kitchen':
+        return 18000;
+      case 'maintenance':
+        return 17000;
+      case 'housekeeping':
+        return 15000;
+      case 'security':
+        return 16000;
+      default:
+        return 16000;
+    }
   },
 
   // ==========================================
@@ -691,12 +736,12 @@ export const dataService = {
       const { data, error } = await supabase.from('leave_requests').select('*');
       if (error) {
         notifySchemaMissing('leave_requests', error);
-        return mockData.getLeaveRequests();
+        return [];
       }
       return (data || []).map(mapLeaveRequest);
     } catch (err) {
       notifySchemaMissing('leave_requests', err);
-      return mockData.getLeaveRequests();
+      return [];
     }
   },
 
@@ -709,12 +754,12 @@ export const dataService = {
         .eq('user_id', userId);
       if (error) {
         notifySchemaMissing('leave_requests', error);
-        return mockData.getLeaveRequestsByUser(userId);
+        return [];
       }
       return (data || []).map(mapLeaveRequest);
     } catch (err) {
       notifySchemaMissing('leave_requests', err);
-      return mockData.getLeaveRequestsByUser(userId);
+      return [];
     }
   },
 
@@ -736,12 +781,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('leave_requests', error);
-        return mockData.createLeaveRequest(request);
+        throw new Error(error.message || 'Failed to create leave request');
       }
       return mapLeaveRequest(data);
     } catch (err) {
       notifySchemaMissing('leave_requests', err);
-      return mockData.createLeaveRequest(request);
+      throw err;
     }
   },
 
@@ -768,12 +813,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('leave_requests', error);
-        return mockData.updateLeaveRequestStatus(id, status, reviewedBy, reason);
+        throw new Error(error.message || 'Failed to update leave request');
       }
       return data ? mapLeaveRequest(data) : null;
     } catch (err) {
       notifySchemaMissing('leave_requests', err);
-      return mockData.updateLeaveRequestStatus(id, status, reviewedBy, reason);
+      throw err;
     }
   },
 
@@ -788,12 +833,12 @@ export const dataService = {
         .select('*');
       if (error) {
         notifySchemaMissing('attendance_correction_requests', error);
-        return mockData.getAttendanceCorrectionRequests();
+        return [];
       }
       return (data || []).map(mapAttendanceCorrectionRequest);
     } catch (err) {
       notifySchemaMissing('attendance_correction_requests', err);
-      return mockData.getAttendanceCorrectionRequests();
+      return [];
     }
   },
 
@@ -806,12 +851,12 @@ export const dataService = {
         .eq('user_id', userId);
       if (error) {
         notifySchemaMissing('attendance_correction_requests', error);
-        return mockData.getAttendanceCorrectionRequestsByUser(userId);
+        return [];
       }
       return (data || []).map(mapAttendanceCorrectionRequest);
     } catch (err) {
       notifySchemaMissing('attendance_correction_requests', err);
-      return mockData.getAttendanceCorrectionRequestsByUser(userId);
+      return [];
     }
   },
 
@@ -828,12 +873,12 @@ export const dataService = {
         .in('user_id', userIds);
       if (error) {
         notifySchemaMissing('attendance_correction_requests', error);
-        return mockData.getAttendanceCorrectionRequestsByProperty(propertyId);
+        return [];
       }
       return (data || []).map(mapAttendanceCorrectionRequest);
     } catch (err) {
       notifySchemaMissing('attendance_correction_requests', err);
-      return mockData.getAttendanceCorrectionRequestsByProperty(propertyId);
+      return [];
     }
   },
 
@@ -855,12 +900,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('attendance_correction_requests', error);
-        return mockData.createAttendanceCorrectionRequest(request);
+        throw new Error(error.message || 'Failed to create attendance correction request');
       }
       return mapAttendanceCorrectionRequest(data);
     } catch (err) {
       notifySchemaMissing('attendance_correction_requests', err);
-      return mockData.createAttendanceCorrectionRequest(request);
+      throw err;
     }
   },
 
@@ -880,12 +925,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('attendance_correction_requests', error);
-        return mockData.updateAttendanceCorrectionRequestStatus(id, status, reviewedBy);
+        throw new Error(error.message || 'Failed to update attendance correction request');
       }
       return data ? mapAttendanceCorrectionRequest(data) : null;
     } catch (err) {
       notifySchemaMissing('attendance_correction_requests', err);
-      return mockData.updateAttendanceCorrectionRequestStatus(id, status, reviewedBy);
+      throw err;
     }
   },
 
@@ -900,12 +945,12 @@ export const dataService = {
       const { data, error } = await query;
       if (error) {
         notifySchemaMissing('task_categories', error);
-        return mockData.getTaskCategories(propertyId);
+        return [];
       }
       return (data || []).map(mapTaskCategory);
     } catch (err) {
       notifySchemaMissing('task_categories', err);
-      return mockData.getTaskCategories(propertyId);
+      return [];
     }
   },
 
@@ -918,12 +963,12 @@ export const dataService = {
       const { data, error } = await supabase.from('tasks').select('*');
       if (error) {
         notifySchemaMissing('tasks', error);
-        return mockData.getTasks();
+        return [];
       }
       return (data || []).map(mapTask);
     } catch (err) {
       notifySchemaMissing('tasks', err);
-      return mockData.getTasks();
+      return [];
     }
   },
 
@@ -936,27 +981,27 @@ export const dataService = {
         .eq('property_id', propertyId);
       if (error) {
         notifySchemaMissing('tasks', error);
-        return mockData.getTasksByProperty(propertyId);
+        return [];
       }
       return (data || []).map(mapTask);
     } catch (err) {
       notifySchemaMissing('tasks', err);
-      return mockData.getTasksByProperty(propertyId);
+      return [];
     }
   },
 
   async getTaskById(id: string): Promise<Task | null> {
     if (!isProduction()) return mockData.getTaskById(id);
     try {
-      const { data, error } = await supabase.from('tasks').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('tasks').select('*').eq('id', id).maybeSingle();
       if (error) {
         if (isSchemaMissingError(error)) notifySchemaMissing('tasks', error);
-        return mockData.getTaskById(id);
+        return null;
       }
       return data ? mapTask(data) : null;
     } catch (err) {
       notifySchemaMissing('tasks', err);
-      return mockData.getTaskById(id);
+      return null;
     }
   },
 
@@ -979,12 +1024,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('tasks', error);
-        return mockData.createTask(task);
+        throw new Error(error.message || 'Failed to create task in database');
       }
       return mapTask(data);
     } catch (err) {
       notifySchemaMissing('tasks', err);
-      return mockData.createTask(task);
+      throw err;
     }
   },
 
@@ -1009,12 +1054,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('tasks', error);
-        return mockData.updateTask(id, updates);
+        throw new Error(error.message || 'Failed to update task in database');
       }
       return data ? mapTask(data) : null;
     } catch (err) {
       notifySchemaMissing('tasks', err);
-      return mockData.updateTask(id, updates);
+      throw err;
     }
   },
 
@@ -1039,12 +1084,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('tasks', error);
-        return mockData.updateTaskStatus(id, status, lastActionBy, lastActionNote);
+        throw new Error(error.message || 'Failed to update task status in database');
       }
       return data ? mapTask(data) : null;
     } catch (err) {
       notifySchemaMissing('tasks', err);
-      return mockData.updateTaskStatus(id, status, lastActionBy, lastActionNote);
+      throw err;
     }
   },
 
@@ -1057,27 +1102,27 @@ export const dataService = {
       const { data, error } = await supabase.from('vouchers').select('*');
       if (error) {
         notifySchemaMissing('vouchers', error);
-        return mockData.getVouchers();
+        return [];
       }
       return (data || []).map(mapVoucher);
     } catch (err) {
       notifySchemaMissing('vouchers', err);
-      return mockData.getVouchers();
+      return [];
     }
   },
 
   async getVoucherById(id: string): Promise<Voucher | null> {
     if (!isProduction()) return mockData.getVoucherById(id);
     try {
-      const { data, error } = await supabase.from('vouchers').select('*').eq('id', id).single();
+      const { data, error } = await supabase.from('vouchers').select('*').eq('id', id).maybeSingle();
       if (error) {
         if (isSchemaMissingError(error)) notifySchemaMissing('vouchers', error);
-        return mockData.getVoucherById(id);
+        return null;
       }
       return data ? mapVoucher(data) : null;
     } catch (err) {
       notifySchemaMissing('vouchers', err);
-      return mockData.getVoucherById(id);
+      return null;
     }
   },
 
@@ -1091,12 +1136,12 @@ export const dataService = {
         .maybeSingle();
       if (error) {
         if (isSchemaMissingError(error)) notifySchemaMissing('vouchers', error);
-        return mockData.getVoucherByTaskId(taskId);
+        return null;
       }
       return data ? mapVoucher(data) : null;
     } catch (err) {
       notifySchemaMissing('vouchers', err);
-      return mockData.getVoucherByTaskId(taskId);
+      return null;
     }
   },
 
@@ -1115,12 +1160,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('vouchers', error);
-        return mockData.createVoucher(voucher);
+        throw new Error(error.message || 'Failed to create voucher in database');
       }
       return mapVoucher(data);
     } catch (err) {
       notifySchemaMissing('vouchers', err);
-      return mockData.createVoucher(voucher);
+      throw err;
     }
   },
 
@@ -1141,12 +1186,12 @@ export const dataService = {
         .single();
       if (error) {
         notifySchemaMissing('vouchers', error);
-        return mockData.updateVoucher(id, updates);
+        throw new Error(error.message || 'Failed to update voucher in database');
       }
       return data ? mapVoucher(data) : null;
     } catch (err) {
       notifySchemaMissing('vouchers', err);
-      return mockData.updateVoucher(id, updates);
+      throw err;
     }
   },
 };

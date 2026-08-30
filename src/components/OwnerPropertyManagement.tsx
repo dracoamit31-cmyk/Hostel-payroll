@@ -260,7 +260,16 @@ export default function OwnerPropertyManagement() {
         </h3>
 
         <div className="grid grid-cols-1 gap-4">
-          {properties.map((property) => {
+          {properties.length === 0 ? (
+            <div className="rounded-2xl bg-slate-900/40 border border-slate-800/80 p-8 text-center space-y-2">
+              <Building2 className="w-8 h-8 text-slate-600 mx-auto" />
+              <p className="text-sm font-medium text-slate-300">No properties in database yet</p>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                Use the "Add New Property" form above to create your first hostel property in Supabase.
+              </p>
+            </div>
+          ) : (
+            properties.map((property) => {
             const staff = propertyStaffMap[property.id] || {
               manager: null,
               inventoryManager: null,
@@ -370,7 +379,8 @@ export default function OwnerPropertyManagement() {
                 </div>
               </div>
             );
-          })}
+          })
+          )}
         </div>
       </div>
     </div>

@@ -264,6 +264,19 @@ export default function StaffManagement() {
     );
   }
 
+  // If owner has no properties created yet
+  if (isOwner && properties.length === 0) {
+    return (
+      <div className="rounded-2xl bg-slate-900 border border-slate-800 p-8 text-center space-y-4">
+        <Building2 className="w-10 h-10 text-purple-400 mx-auto" />
+        <h2 className="text-lg font-bold text-white">No Properties Created Yet</h2>
+        <p className="text-sm text-slate-400 max-w-md mx-auto">
+          Please add your first property in the "Hostels &amp; Properties" tab before adding employees and configuring staff shifts.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Header & Scoping Section */}
